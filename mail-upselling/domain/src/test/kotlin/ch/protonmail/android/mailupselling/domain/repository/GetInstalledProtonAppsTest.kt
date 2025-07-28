@@ -18,10 +18,12 @@
 
 package ch.protonmail.android.mailupselling.domain.repository
 
-import android.content.Intent
+import android.content.Context
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.Before
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -29,16 +31,18 @@ import kotlin.test.assertTrue
 internal class GetInstalledProtonAppsTest {
 
     private val pm = mockk<PackageManager>()
-    private val sut by lazy {
-        GetInstalledProtonApps(
-            mockk {
-                every { this@mockk.packageManager } returns pm
-            }
-        )
+    private val context = mockk<Context> {
+        every { packageManager } returns pm
+    }
+    private lateinit var sut: GetInstalledProtonApps
+
+    @Before
+    fun setUp() {
+        sut = GetInstalledProtonApps(context)
     }
 
     @Test
-    fun `returns empty set when no Proton apps are installed`() {
+    fun `returns empty list when no Proton apps are installed`() {
         // Given
         mockInstalled()
 
@@ -46,71 +50,94 @@ internal class GetInstalledProtonAppsTest {
         val result = sut()
 
         // Then
-        assertTrue(result.isEmpty())
+        assertTrue(result.appsAndVersions.isEmpty())
     }
 
     @Test
     fun `returns only VPN when only VPN is installed`() {
         // Given
-        mockInstalled(InstalledProtonApp.VPN)
+        mockInstalled("ch.protonvpn.android" to "v2")
 
         // When
         val result = sut()
 
         // Then
-        assertEquals(setOf(InstalledProtonApp.VPN), result)
+        assertEquals(
+            listOf(
+                InstalledProtonApps.AppInfo(
+                    packageName = "ch.protonvpn.android",
+                    version = "v2"
+                )
+            ),
+            result.appsAndVersions
+        )
     }
 
     @Test
     fun `returns only Drive when only Drive is installed`() {
         // Given
-        mockInstalled(InstalledProtonApp.Drive)
+        mockInstalled("me.proton.android.drive" to "v1")
 
         // When
         val result = sut()
 
         // Then
-        assertEquals(setOf(InstalledProtonApp.Drive), result)
+        assertEquals(
+            listOf(
+                InstalledProtonApps.AppInfo(
+                    packageName = "me.proton.android.drive",
+                    version = "v1"
+                )
+            ),
+            result.appsAndVersions
+        )
     }
 
     @Test
     fun `returns only Calendar when only Calendar is installed`() {
         // Given
-        mockInstalled(InstalledProtonApp.Calendar)
+        mockInstalled("me.proton.android.calendar" to "2.27.0")
 
         // When
         val result = sut()
 
         // Then
-        assertEquals(setOf(InstalledProtonApp.Calendar), result)
+        assertEquals(
+            listOf(
+                InstalledProtonApps.AppInfo(
+                    packageName = "me.proton.android.calendar",
+                    version = "2.27.0"
+                )
+            ),
+            result.appsAndVersions
+        )
     }
 
     @Test
     fun `returns all Proton apps when all are installed`() {
         // Given
-        mockInstalled(*InstalledProtonApp.entries.toTypedArray())
+        val all = listOf(
+            "ch.protonvpn.android" to "v1",
+            "me.proton.android.drive" to "v2",
+            "me.proton.android.calendar" to "v3",
+            "proton.android.pass" to "v4",
+            "me.proton.wallet.android" to "v5"
+        )
+        mockInstalled(*all.toTypedArray())
 
         // When
         val result = sut()
 
         // Then
-        assertEquals(InstalledProtonApp.entries.toSet(), result)
+        val expected = all.map { InstalledProtonApps.AppInfo(it.first, it.second) }
+        assertEquals(expected, result.appsAndVersions)
     }
 
-    private fun mockInstalled(vararg installedApps: InstalledProtonApp) {
-        InstalledProtonApp.entries.forEach { app ->
-            val pkg = when (app) {
-                InstalledProtonApp.VPN -> "ch.protonvpn.android"
-                InstalledProtonApp.Drive -> "me.proton.android.drive"
-                InstalledProtonApp.Calendar -> "me.proton.android.calendar"
-                InstalledProtonApp.Pass -> "proton.android.pass"
-                InstalledProtonApp.Wallet -> "me.proton.wallet.android"
-            }
-            if (installedApps.contains(app)) {
-                every { pm.getLaunchIntentForPackage(pkg) } returns mockk<Intent>()
-            } else {
-                every { pm.getLaunchIntentForPackage(pkg) } returns null
-            }
+    private fun mockInstalled(vararg installed: Pair<String, String>) {
+        every { pm.getPackageInfo(any<String>(), any<Int>()) } throws PackageManager.NameNotFoundException()
+        installed.forEach { (pkg, pkgVersion) ->
+            val pi = PackageInfo().apply { versionName = pkgVersion }
+            every { pm.getPackageInfo(pkg, 0) } returns pi
         }
     }
 }

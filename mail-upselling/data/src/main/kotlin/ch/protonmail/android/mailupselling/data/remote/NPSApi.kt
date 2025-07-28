@@ -26,9 +26,9 @@ import retrofit2.http.POST
 
 interface NPSApi : BaseRetrofitApi {
 
-    @POST("api/vpn/v1/nps/dismiss")
+    @POST("core/v4/nps/dismiss")
     suspend fun skip(@Body body: NPSFeedbackBody): ResponseBody
 
-    @POST("api/vpn/v1/nps/submit")
+    @POST("core/v4/nps/submit")
     suspend fun submit(@Body body: NPSFeedbackBody): ResponseBody
 }

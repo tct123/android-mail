@@ -26,11 +26,13 @@ import ch.protonmail.android.mailcommon.data.worker.Enqueuer
 import ch.protonmail.android.mailcommon.domain.util.requireNotBlank
 import ch.protonmail.android.mailupselling.data.datasource.NPSFeedbackRemoteDataSource
 import ch.protonmail.android.mailupselling.data.remote.resource.NPSFeedbackBody
-import ch.protonmail.android.mailupselling.domain.repository.InstalledProtonApp
+import ch.protonmail.android.mailupselling.domain.repository.InstalledProtonApps
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.serialization.Serializable
 import me.proton.core.domain.entity.UserId
-import me.proton.core.util.kotlin.takeIfNotBlank
+import me.proton.core.util.kotlin.deserialize
+import me.proton.core.util.kotlin.serialize
 import timber.log.Timber
 
 @HiltWorker
@@ -42,32 +44,18 @@ class NPSFeedbackWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val userId = UserId(requireNotBlank(inputData.getString(Keys.UserId), fieldName = "User id"))
-        val comment = inputData.getString(Keys.Comment)?.takeIfNotBlank()
-        val userTier = inputData.getString(Keys.UserTier)?.takeIfNotBlank()
-        val userCountry = inputData.getString(Keys.UserCountry)?.takeIfNotBlank()
-        val daysFromSignup = inputData.getInt(Keys.DaysFromSignup, 0)
-        val ratingValue = inputData.getInt(Keys.RatingValue, -1).takeIf { it >= 0 }
-        val skipped = inputData.getBoolean(Keys.Skipped, true)
 
-        val vpnInstalled = inputData.getBoolean(Keys.VpnInstalled, false)
-        val driveInstalled = inputData.getBoolean(Keys.DriveInstalled, false)
-        val calendarInstalled = inputData.getBoolean(Keys.CalendarInstalled, false)
-        val walletInstalled = inputData.getBoolean(Keys.WalletInstalled, false)
-        val passInstalled = inputData.getBoolean(Keys.PassInstalled, false)
+        val input = requireNotBlank(inputData.getString(Keys.WorkerInput))
+            .deserialize<WorkerInput>()
 
         val body = NPSFeedbackBody(
-            ratingValue = ratingValue ?: NPSFeedbackBody.NO_RATING,
-            comment = comment,
-            userTier = userTier.orEmpty(),
-            userCountry = userCountry.orEmpty(),
-            daysFromSignup = daysFromSignup,
-            vpnInstalled = vpnInstalled,
-            driveInstalled = driveInstalled,
-            calendarInstalled = calendarInstalled,
-            walletInstalled = walletInstalled,
-            passInstalled = passInstalled
+            ratingValue = input.ratingValue ?: NPSFeedbackBody.NO_RATING,
+            comment = input.comment,
+            installedApps = input.installedProtonApps.map {
+                "${it.packagaName}:${it.versionName}"
+            }
         )
-        return if (skipped) {
+        return if (input.skipped) {
             dataSource.skip(userId, body)
         } else {
             dataSource.submit(userId, body)
@@ -87,17 +75,19 @@ class NPSFeedbackWorker @AssistedInject constructor(
 
     private object Keys {
         const val UserId = "UserId"
-        const val RatingValue = "RatingValue"
-        const val Comment = "Comment"
-        const val UserTier = "UserTier"
-        const val UserCountry = "UserCountry"
-        const val DaysFromSignup = "DaysFromSignup"
-        const val Skipped = "Skipped"
-        const val VpnInstalled = "VpnInstalled"
-        const val DriveInstalled = "DriveInstalled"
-        const val CalendarInstalled = "CalendarInstalled"
-        const val WalletInstalled = "WalletInstalled"
-        const val PassInstalled = "PassInstalled"
+        const val WorkerInput = "WorkerInput"
+    }
+
+    @Serializable
+    private data class WorkerInput(
+        val userId: UserId,
+        val ratingValue: Int?,
+        val comment: String?,
+        val skipped: Boolean,
+        val installedProtonApps: List<InstalledAppInfo>
+    ) {
+        @Serializable
+        data class InstalledAppInfo(val packagaName: String, val versionName: String)
     }
 
     companion object {
@@ -108,27 +98,25 @@ class NPSFeedbackWorker @AssistedInject constructor(
             userId: UserId,
             ratingValue: Int?,
             comment: String?,
-            userTier: String,
-            userCountry: String,
-            daysFromSignup: Int,
             skipped: Boolean,
-            installedProtonApps: Set<InstalledProtonApp>
+            installedProtonApps: InstalledProtonApps
         ) {
             enqueuer.enqueue<NPSFeedbackWorker>(
                 userId,
                 mapOf(
                     Keys.UserId to userId.id,
-                    Keys.RatingValue to (ratingValue ?: -1),
-                    Keys.Comment to comment.orEmpty(),
-                    Keys.UserTier to userTier,
-                    Keys.UserCountry to userCountry,
-                    Keys.DaysFromSignup to daysFromSignup,
-                    Keys.Skipped to skipped,
-                    Keys.VpnInstalled to installedProtonApps.contains(InstalledProtonApp.VPN),
-                    Keys.DriveInstalled to installedProtonApps.contains(InstalledProtonApp.Drive),
-                    Keys.CalendarInstalled to installedProtonApps.contains(InstalledProtonApp.Calendar),
-                    Keys.WalletInstalled to installedProtonApps.contains(InstalledProtonApp.Wallet),
-                    Keys.PassInstalled to installedProtonApps.contains(InstalledProtonApp.Pass)
+                    Keys.WorkerInput to WorkerInput(
+                        userId = userId,
+                        ratingValue = ratingValue,
+                        comment = comment,
+                        skipped = skipped,
+                        installedProtonApps = installedProtonApps.appsAndVersions.map {
+                            WorkerInput.InstalledAppInfo(
+                                packagaName = it.packageName,
+                                versionName = it.version
+                            )
+                        }
+                    ).serialize()
                 )
             )
         }

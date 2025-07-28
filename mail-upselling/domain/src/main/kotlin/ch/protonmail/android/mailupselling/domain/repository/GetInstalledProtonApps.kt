@@ -19,6 +19,7 @@
 package ch.protonmail.android.mailupselling.domain.repository
 
 import android.content.Context
+import android.content.pm.PackageManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
@@ -26,20 +27,35 @@ class GetInstalledProtonApps @Inject constructor(
     @ApplicationContext private val appContext: Context
 ) {
 
-    operator fun invoke(): Set<InstalledProtonApp> = InstalledProtonApp.entries.filter { it.isInstalled() }.toSet()
+    operator fun invoke(): InstalledProtonApps {
+        val installed = ProtonPackages
+            .mapNotNull { queryInstalledAppInfo(it, appContext.packageManager) }
 
-    private fun InstalledProtonApp.isInstalled() =
-        appContext.packageManager.getLaunchIntentForPackage(packageName()) != null
+        return InstalledProtonApps(appsAndVersions = installed)
+    }
 }
 
-private fun InstalledProtonApp.packageName() = when (this) {
-    InstalledProtonApp.VPN -> "ch.protonvpn.android"
-    InstalledProtonApp.Drive -> "me.proton.android.drive"
-    InstalledProtonApp.Calendar -> "me.proton.android.calendar"
-    InstalledProtonApp.Pass -> "proton.android.pass"
-    InstalledProtonApp.Wallet -> "me.proton.wallet.android"
+@Suppress("SwallowedException")
+private fun queryInstalledAppInfo(packageName: String, pm: PackageManager): InstalledProtonApps.AppInfo? = try {
+    val info = pm.getPackageInfo(packageName, 0)
+    InstalledProtonApps.AppInfo(packageName = packageName, version = info.versionName.orEmpty())
+} catch (_: PackageManager.NameNotFoundException) {
+    null // not installed
 }
 
-enum class InstalledProtonApp {
-    VPN, Drive, Calendar, Pass, Wallet
+data class InstalledProtonApps(
+    val appsAndVersions: List<AppInfo>
+) {
+    data class AppInfo(
+        val packageName: String,
+        val version: String
+    )
 }
+
+private val ProtonPackages = listOf(
+    "ch.protonvpn.android",
+    "me.proton.android.drive",
+    "me.proton.android.calendar",
+    "proton.android.pass",
+    "me.proton.wallet.android"
+)

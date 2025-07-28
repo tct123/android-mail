@@ -20,19 +20,12 @@ package ch.protonmail.upselling.domain.usecase
 
 import java.time.Instant
 import java.time.ZoneId
-import java.util.Locale
 import java.util.TimeZone
-import arrow.core.right
 import ch.protonmail.android.mailcommon.domain.sample.UserSample
-import ch.protonmail.android.mailcommon.domain.usecase.GetAppLocale
-import ch.protonmail.android.mailupselling.domain.model.telemetry.data.AccountAge
-import ch.protonmail.android.mailupselling.domain.model.telemetry.data.SubscriptionName
 import ch.protonmail.android.mailupselling.domain.repository.GetInstalledProtonApps
-import ch.protonmail.android.mailupselling.domain.repository.InstalledProtonApp
+import ch.protonmail.android.mailupselling.domain.repository.InstalledProtonApps
 import ch.protonmail.android.mailupselling.domain.repository.NPSFeedbackRepository
 import ch.protonmail.android.mailupselling.domain.usecase.EnqueueNewNPSFeedback
-import ch.protonmail.android.mailupselling.domain.usecase.GetAccountAgeInDays
-import ch.protonmail.android.mailupselling.domain.usecase.GetSubscriptionName
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -50,11 +43,7 @@ import kotlin.test.Test
 
 internal class EnqueueNewNPSFeedbackTest {
 
-    private val getAccountAgeInDays = mockk<GetAccountAgeInDays>()
     private val getPrimaryUser = mockk<GetPrimaryUser>()
-    private val getSubscriptionName = mockk<GetSubscriptionName>()
-
-    private val getAppLocale = mockk<GetAppLocale>()
     private val dispatcherProvider = TestDispatcherProvider(UnconfinedTestDispatcher())
     private val scopeProvider = TestCoroutineScopeProvider(dispatcherProvider)
     private val getInstalledProtonApps = mockk<GetInstalledProtonApps>()
@@ -64,10 +53,7 @@ internal class EnqueueNewNPSFeedbackTest {
 
     private val sut: EnqueueNewNPSFeedback
         get() = EnqueueNewNPSFeedback(
-            getAccountAgeInDays = getAccountAgeInDays,
             getPrimaryUser = getPrimaryUser,
-            getAppLocale = getAppLocale,
-            getSubscriptionName = getSubscriptionName,
             scopeProvider = scopeProvider,
             repo = repo,
             getInstalledProtonApps = getInstalledProtonApps
@@ -99,9 +85,6 @@ internal class EnqueueNewNPSFeedbackTest {
                 userId = any(),
                 ratingValue = any(),
                 comment = any(),
-                userTier = any(),
-                userCountry = any(),
-                daysFromSignup = any(),
                 skipped = any(),
                 installedProtonApps = any()
             )
@@ -112,10 +95,7 @@ internal class EnqueueNewNPSFeedbackTest {
     fun `should track skipped event`() = runTest {
         // Given
         coEvery { getPrimaryUser() } returns user
-        every { getAccountAgeInDays(user) } returns AccountAge(7)
-        coEvery { getSubscriptionName(user.userId) } returns SubscriptionName("free").right()
-        every { getAppLocale() } returns Locale.ENGLISH
-        every { getInstalledProtonApps() } returns emptySet()
+        every { getInstalledProtonApps() } returns InstalledProtonApps(emptyList())
 
         // When
         sut.skip()
@@ -127,11 +107,8 @@ internal class EnqueueNewNPSFeedbackTest {
                 userId = user.userId,
                 ratingValue = null,
                 comment = null,
-                userTier = "free",
-                userCountry = "English-Greenwich Mean Time",
-                daysFromSignup = 7,
                 skipped = true,
-                installedProtonApps = emptySet()
+                installedProtonApps = InstalledProtonApps(emptyList())
             )
         }
     }
@@ -139,11 +116,9 @@ internal class EnqueueNewNPSFeedbackTest {
     @Test
     fun `should track submit tap event without comment`() = runTest {
         // Given
+        val installedApps = InstalledProtonApps(listOf(InstalledProtonApps.AppInfo("pn1", "v1")))
         coEvery { getPrimaryUser() } returns user
-        every { getAccountAgeInDays(user) } returns AccountAge(2)
-        coEvery { getSubscriptionName(user.userId) } returns SubscriptionName("unlimited").right()
-        every { getAppLocale() } returns Locale.FRENCH
-        every { getInstalledProtonApps() } returns setOf(InstalledProtonApp.Calendar, InstalledProtonApp.VPN)
+        every { getInstalledProtonApps() } returns installedApps
 
         val ratingValue = 4
 
@@ -156,11 +131,8 @@ internal class EnqueueNewNPSFeedbackTest {
                 userId = user.userId,
                 ratingValue = ratingValue,
                 comment = null,
-                userTier = "unlimited",
-                userCountry = "French-Greenwich Mean Time",
-                daysFromSignup = 2,
                 skipped = false,
-                installedProtonApps = setOf(InstalledProtonApp.Calendar, InstalledProtonApp.VPN)
+                installedProtonApps = installedApps
             )
         }
     }
@@ -168,11 +140,14 @@ internal class EnqueueNewNPSFeedbackTest {
     @Test
     fun `should track submit tap event with comment`() = runTest {
         // Given
+        val installedApps = InstalledProtonApps(
+            listOf(
+                InstalledProtonApps.AppInfo("pn1", "v1"),
+                InstalledProtonApps.AppInfo("pn12", "v2")
+            )
+        )
         coEvery { getPrimaryUser() } returns user
-        every { getAccountAgeInDays(user) } returns AccountAge(5)
-        coEvery { getSubscriptionName(user.userId) } returns SubscriptionName("plus").right()
-        every { getAppLocale() } returns Locale.GERMAN
-        every { getInstalledProtonApps() } returns setOf(InstalledProtonApp.Drive, InstalledProtonApp.VPN)
+        every { getInstalledProtonApps() } returns installedApps
 
         val ratingValue = 10
         val comment = "Great app!"
@@ -186,11 +161,8 @@ internal class EnqueueNewNPSFeedbackTest {
                 userId = user.userId,
                 ratingValue = ratingValue,
                 comment = comment,
-                userTier = "plus",
-                userCountry = "German-Greenwich Mean Time",
-                daysFromSignup = 5,
                 skipped = false,
-                installedProtonApps = setOf(InstalledProtonApp.Drive, InstalledProtonApp.VPN)
+                installedProtonApps = installedApps
             )
         }
     }

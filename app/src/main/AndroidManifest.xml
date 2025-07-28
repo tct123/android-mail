@@ -34,6 +34,7 @@
         <package android:name="me.proton.android.drive" />
         <package android:name="ch.protonvpn.android" />
         <package android:name="proton.android.pass" />
+        <package android:name="me.proton.wallet.android" />
     </queries>
 
     <application

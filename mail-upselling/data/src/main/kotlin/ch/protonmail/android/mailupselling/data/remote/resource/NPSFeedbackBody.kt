@@ -24,38 +24,14 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class NPSFeedbackBody(
 
-    @SerialName("rating_value")
+    @SerialName("Score")
     val ratingValue: Int, // [-1, 10]
 
-    @SerialName("comment")
+    @SerialName("Comment")
     val comment: String?,
 
-    @SerialName("user_tier")
-    val userTier: String,
-
-    @SerialName("user_country")
-    val userCountry: String,
-
-    @SerialName("device_os")
-    val deviceOs: String = "Android",
-
-    @SerialName("days_from_signup")
-    val daysFromSignup: Int,
-
-    @SerialName("vpn_installed")
-    val vpnInstalled: Boolean,
-
-    @SerialName("pass_installed")
-    val passInstalled: Boolean,
-
-    @SerialName("wallet_installed")
-    val walletInstalled: Boolean,
-
-    @SerialName("calendar_installed")
-    val calendarInstalled: Boolean,
-
-    @SerialName("drive_installed")
-    val driveInstalled: Boolean
+    @SerialName("InstalledApps")
+    val installedApps: List<String>
 ) {
     companion object {
         const val NO_RATING = -1

@@ -27,10 +27,7 @@ interface NPSFeedbackRepository {
         userId: UserId,
         ratingValue: Int?,
         comment: String?,
-        userTier: String,
-        userCountry: String,
-        daysFromSignup: Int,
         skipped: Boolean,
-        installedProtonApps: Set<InstalledProtonApp>
+        installedProtonApps: InstalledProtonApps
     )
 }
