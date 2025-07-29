@@ -34,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -217,20 +218,27 @@ fun Home(
     }
 
     val errorSendingMessageText = stringResource(id = R.string.mailbox_message_sending_error)
-    val addressDisabledErrorMessageText = stringResource(id = R.string.mailbox_message_sending_error_address_disabled)
     val errorSendingMessageActionText = stringResource(id = R.string.mailbox_message_sending_error_action)
+    val context = LocalContext.current
     fun showErrorSendingMessageSnackbar(error: SendingError?) = scope.launch {
         val message = when (error) {
             is SendingError.GenericLocalized -> error.apiMessage
             is SendingError.ExternalAddressSendDisabled -> error.apiMessage ?: errorSendingMessageText
             is SendingError.SendPreferences -> {
-                val addressDisabled = error.errors.values.any {
-                    it == SendingError.SendPreferencesError.AddressDisabled
+                val disabledAddresses = error.errors.mapNotNull { (address, sendPrefsError) ->
+                    address.takeIf { sendPrefsError == SendingError.SendPreferencesError.AddressDisabled }
                 }
-                if (addressDisabled) {
-                    addressDisabledErrorMessageText
-                } else {
-                    errorSendingMessageText
+                when {
+                    disabledAddresses.size > 1 -> context.getString(
+                        R.string.mailbox_message_sending_error_address_disabled_multiple,
+                        disabledAddresses.first(), disabledAddresses.size - 1
+                    )
+
+                    disabledAddresses.size == 1 -> context.getString(
+                        R.string.mailbox_message_sending_error_address_disabled_single,
+                        disabledAddresses.first()
+                    )
+                    else -> errorSendingMessageText
                 }
             }
             else -> errorSendingMessageText
